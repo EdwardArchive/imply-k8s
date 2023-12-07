@@ -1,0 +1,111 @@
+Description: "Root Stack Infra - EC2"
+Parameters:
+  NameRole:
+    Type: String
+  Allowsourceip:
+    Type: String
+  VPCID:
+    Type: String
+
+## SecurityGroup
+Resources:
+  BastionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: "Bastion SecurityGroup"
+      GroupName: !Sub "${NameRole}-bastion-sg"
+      SecurityGroupIngress: 
+        - IpProtocol: tcp
+          CidrIp: !Ref Allowsourceip
+          FromPort: 22
+          ToPort: 22
+          Description: "Source From Solbit"
+        - IpProtocol: tcp
+          CidrIp: 221.148.114.22/32
+          FromPort: 22
+          ToPort: 22
+          Description: "Source From MZC"
+      Tags: 
+        - Key: "Name"
+          Value: !Sub "${NameRole}-bastion-sg"
+      VpcId: !Ref VPCID
+
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: "ALB SecurityGroup"
+      GroupName: !Sub "${NameRole}-ex-alb-sg"
+      SecurityGroupIngress: 
+        - IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+          FromPort: 443
+          ToPort: 443
+          Description: "443 from ANY"
+        - IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+          FromPort: 80
+          ToPort: 80
+          Description: "80 from ANY"
+      Tags: 
+        - Key: "Name"
+          Value: !Sub "${NameRole}-ex-alb-sg"
+      VpcId: !Ref VPCID
+
+  WebEC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: "Web server SecurityGroup"
+      GroupName: !Sub "${NameRole}-container-sg"
+      SecurityGroupIngress: 
+        - IpProtocol: tcp
+          SourceSecurityGroupId: !Ref BastionSecurityGroup
+          FromPort: 22
+          ToPort: 22
+          Description: "SSH from bastion"
+        - IpProtocol: tcp
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+          FromPort: 80
+          ToPort: 80
+          Description: "80 from ALB"
+      Tags: 
+        - Key: "Name"
+          Value: !Sub "${NameRole}-webec2-sg"
+      VpcId: !Ref VPCID
+
+  WASDBEC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: "WAS,DB server SecurityGroup"
+      GroupName: !Sub "${NameRole}-db-sg"
+      SecurityGroupIngress: 
+        - IpProtocol: tcp
+          SourceSecurityGroupId: !Ref BastionSecurityGroup
+          FromPort: 22
+          ToPort: 22
+          Description: "SSH from bastion"
+        - IpProtocol: tcp
+          SourceSecurityGroupId: !Ref BastionSecurityGroup
+          FromPort: 3306
+          ToPort: 3306
+          Description: "DB Inbound from bastion"
+        - IpProtocol: tcp
+          SourceSecurityGroupId: !Ref WebEC2SecurityGroup
+          FromPort: 3306
+          ToPort: 3306
+          Description: "DB Inbound from Web Server"
+      Tags: 
+        - Key: "Name"
+          Value: !Sub "${NameRole}-wasdb-sg"
+      VpcId: !Ref VPCID
+
+Outputs:
+  BastionSGID:
+    Value: !Ref BastionSecurityGroup
+  WebEC2SGID:
+    Value: !Ref WebEC2SecurityGroup
+  WASDBEC2SGID:
+    Value: !Ref WASDBEC2SecurityGroup
+  ALBSGID:
+    Value: !Ref ALBSecurityGroup
+
+  

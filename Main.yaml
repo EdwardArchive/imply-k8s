@@ -1,0 +1,105 @@
+Description: "Root Stack Infra - Start"
+Parameters:
+  TemplatePath:
+    Type: String
+    Default: infra/imply/dev
+  
+  NameRole:
+    Type: String
+    Default: imply-k8s
+  
+  Region:
+    Type: String
+    Default: ap-northeast-2
+
+  VPCCIDRIP:
+    Type: String
+    Description: The CIDR block for the VPC.
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: CIDR block parameter must be in the form x.x.x.x/16-28
+    Default: 10.0.0.0/24
+      
+  Allowsourceip:
+    Type: String
+    Default: 
+    Description: SSH 접근을 하용할 사무실 IP 입니다.
+
+  ImageId:
+    Type: String
+    Default: ami-09cf633fe86e51bf0
+
+  Keypair:
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: "None"
+
+Rules:
+  Rule01:
+    Assertions:
+      - Assert: !Not [ !Equals [!Ref Keypair,"None"] ]
+        AssertDescription: Keypair is required
+      
+Resources:
+  NetworkStack:
+    Type: "AWS::CloudFormation::Stack"
+    Properties:
+      TemplateURL: !Sub "https://cloudformationsourcerepo.s3.${Region}.amazonaws.com/${TemplatePath}/Network.yaml"
+      Parameters:
+        NameRole: !Ref NameRole
+        Region: !Ref Region
+        VPCCIDR: !Ref VPCCIDRIP
+      Tags:
+        - Key: Name
+          Value: NetworkStack
+
+  SecurityGroupStack:
+    Type: "AWS::CloudFormation::Stack"
+    Properties:
+      TemplateURL: !Sub "https://cloudformationsourcerepo.s3.${Region}.amazonaws.com/${TemplatePath}/SG.yaml"
+      Parameters:
+        VPCID: !GetAtt NetworkStack.Outputs.VPCID 
+        NameRole: !Ref NameRole
+        Allowsourceip: !Ref Allowsourceip
+      Tags:
+        - Key: Name
+          Value: SecurityGroupStack
+  
+  EC2Stack:
+    Type: "AWS::CloudFormation::Stack"
+    Properties:
+      TemplateURL: !Sub "https://cloudformationsourcerepo.s3.${Region}.amazonaws.com/${TemplatePath}/EC2.yaml"
+      Parameters:
+        PublicSubnet1ID: !GetAtt NetworkStack.Outputs.PublicSubnet1ID
+        PrivateSubnet1ID: !GetAtt NetworkStack.Outputs.PrivateSubnet1ID
+        PrivateSubnetDB1ID: !GetAtt NetworkStack.Outputs.PrivateSubnetDB1ID
+        BastionSGID: !GetAtt SecurityGroupStack.Outputs.BastionSGID
+        WebEC2SGID: !GetAtt SecurityGroupStack.Outputs.WebEC2SGID
+        WASDBEC2SGID: !GetAtt SecurityGroupStack.Outputs.WASDBEC2SGID
+        ImageId: !Ref ImageId
+        Keypair: !Ref Keypair
+        NameRole: !Ref NameRole
+      Tags:
+        - Key: Name
+          Value: EC2Stack
+
+  ALBStack:
+    Type: "AWS::CloudFormation::Stack"
+    Properties:
+      TemplateURL: !Sub "https://cloudformationsourcerepo.s3.${Region}.amazonaws.com/${TemplatePath}/ALB.yaml"
+      Parameters:
+        PublicSubnet1ID: !GetAtt NetworkStack.Outputs.PublicSubnet1ID
+        PublicSubnet2ID: !GetAtt NetworkStack.Outputs.PublicSubnet2ID
+        ALBSGID: !GetAtt SecurityGroupStack.Outputs.ALBSGID
+        VPCID: !GetAtt NetworkStack.Outputs.VPCID
+        NameRole: !Ref NameRole
+        WebInstance: !GetAtt EC2Stack.Outputs.WebServerEC2ID
+      Tags:
+        - Key: Name
+          Value: EC2Stack
+
+Outputs:
+  BastionPublicIP:
+    Value: !GetAtt EC2Stack.Outputs.BastionPublicIP
+  WebServerPrivateIP:
+    Value: !GetAtt EC2Stack.Outputs.WebServerPrivateIP
+  WASDBServerPrivateIP:
+    Value: !GetAtt EC2Stack.Outputs.WASDBServerPrivateIP

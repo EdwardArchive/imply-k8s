@@ -1,0 +1,63 @@
+Description: "Root Stack Infra - ALB"
+
+Parameters:
+  NameRole:
+    Type: String
+  WebInstance:
+    Type: String
+  PublicSubnet1ID:
+    Type: String
+  PublicSubnet2ID:
+    Type: String
+  ALBSGID:
+    Type: String
+  VPCID:
+    Type: String
+
+Resources:
+  WEBALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme : internet-facing
+      Subnets:
+        - !Ref PublicSubnet1ID
+        - !Ref PublicSubnet2ID
+      SecurityGroups:
+        - !Ref ALBSGID
+  WEBALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref WEBTargetGroup
+      LoadBalancerArn: !Ref WEBALB
+      Port: 80
+      Protocol: HTTP
+       
+  WEBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 5
+      Matcher:
+        HttpCode : '200'
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 2
+      VpcId: !Ref VPCID
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: '300'
+      Targets:
+        - Id: !Ref WebInstance
+          Port: 80  
+      Tags:
+        - Key: Name
+          Value: WEBTargetGroup
+        - Key: Port
+          Value: 80
+
+Outputs:
+  ALBDefaultDomain:
+    Value: !GetAtt WEBALB.DNSName

@@ -1,0 +1,179 @@
+Description: "Root Stack Infra - Network"
+Parameters:
+  Region:
+    Type: String
+  
+  NameRole:
+    Type: String
+
+  VPCCIDR : 
+    Type: String
+  
+Resources:
+  ## VPC
+  PubPrivateVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VPCCIDR
+      Tags :
+        - Key: "Name"
+          Value: !Sub "${NameRole}-vpc"
+
+  ##Public SUBNETS     
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref PubPrivateVPC
+      AvailabilityZone: !Sub "${Region}a"
+      CidrBlock: !Select [ 0, !Cidr [ !GetAtt PubPrivateVPC.CidrBlock, 4, 6 ]]
+      MapPublicIpOnLaunch: true
+      Tags :
+        - Key: "Name"
+          Value: !Sub "${NameRole}-pub-2a"
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref PubPrivateVPC
+      AvailabilityZone: !Sub "${Region}c"
+      CidrBlock: !Select [ 3, !Cidr [ !GetAtt PubPrivateVPC.CidrBlock, 4, 6 ]]
+      MapPublicIpOnLaunch: true
+      Tags :
+        - Key: "Name"
+          Value: !Sub "${NameRole}-pub-2c"
+
+  ##Private SUBNETS for web
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref PubPrivateVPC
+      AvailabilityZone: !Sub "${Region}a"
+      CidrBlock: !Select [ 1, !Cidr [ !GetAtt PubPrivateVPC.CidrBlock, 4, 6 ]]
+      MapPublicIpOnLaunch: false
+      Tags :
+        - Key: "Name"
+          Value: !Sub "${NameRole}-web-2a"
+
+
+  ##Private SUBNETS for WAS,DB 
+  PrivateSubnetDB1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref PubPrivateVPC
+      AvailabilityZone: !Sub "${Region}a"
+      CidrBlock: !Select [ 2, !Cidr [ !GetAtt PubPrivateVPC.CidrBlock, 4, 6 ]]
+      MapPublicIpOnLaunch: false
+      Tags :
+        - Key: "Name"
+          Value: !Sub "${NameRole}-db-2a"
+        
+  ##Public SUBNETS for temp
+ 
+## INTERNET GATEWAY
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags :
+        - Key: "Name"
+          Value: !Sub "${NameRole}-igw"
+  
+  GatewayToInternet:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref PubPrivateVPC
+      InternetGatewayId: !Ref InternetGateway
+  
+  ## PUBLIC ROUTING
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref PubPrivateVPC
+      Tags :
+        - Key: "Name"
+          Value: !Sub "${NameRole}-public-rt"
+  
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayToInternet
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  ## ELASTIC IP
+  NatPublicIP:
+    Type: AWS::EC2::EIP
+    DependsOn: PubPrivateVPC
+    Properties:
+      Domain: vpc
+      Tags :
+        - Key: "Name"
+          Value: !Sub "${NameRole}-eip"
+
+  ## NAT GATEWAY
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    DependsOn: NatPublicIP
+    Properties: 
+      SubnetId: !Ref PublicSubnet1
+      AllocationId: !GetAtt NatPublicIP.AllocationId
+      Tags :
+        - Key: "Name"
+          Value: !Sub "${NameRole}-nat"
+  
+  ## PRIVATE ROUTING
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref PubPrivateVPC
+      Tags :
+        - Key: "Name"
+          Value: !Sub "${NameRole}-private-rt"
+  
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      NatGatewayId: !Ref NatGateway
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnetDB1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnetDB1
+      RouteTableId: !Ref PrivateRouteTable
+
+
+Outputs:
+  VPCID:
+    Value: !Ref PubPrivateVPC
+
+  PublicSubnet1ID:
+    Value: !Ref PublicSubnet1
+
+  PublicSubnet2ID:
+    Value: !Ref PublicSubnet2
+
+  PrivateSubnet1ID:
+    Value: !Ref PrivateSubnet1
+
+  PrivateSubnetDB1ID:
+    Value: !Ref PrivateSubnetDB1

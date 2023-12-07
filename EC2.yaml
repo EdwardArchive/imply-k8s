@@ -1,0 +1,91 @@
+Description: "Root Stack Infra - EC2"
+Parameters:
+  PublicSubnet1ID:
+    Type: String
+  PrivateSubnet1ID:
+    Type: String
+  PrivateSubnetDB1ID:
+    Type: String
+  BastionSGID:
+    Type: String
+  WebEC2SGID:
+    Type: String
+  WASDBEC2SGID:
+    Type: String
+  NameRole:
+    Type: String
+  ImageId:
+    Type: String
+  Keypair:
+    Type: String
+
+Resources:
+  BastionEC2:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref ImageId
+      InstanceType: t3.small
+      KeyName: !Ref Keypair
+      DisableApiTermination: False
+      BlockDeviceMappings: 
+      - DeviceName: "/dev/xvda"
+        Ebs: 
+          VolumeType: "gp3"
+          DeleteOnTermination: True
+          VolumeSize: 10
+      SecurityGroupIds:
+        - !Ref BastionSGID
+      SubnetId: !Ref PublicSubnet1ID
+      Tags: 
+        - Key: "Name"
+          Value: !Sub "${NameRole}-bastion"
+
+  WebServerEC2:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref ImageId
+      InstanceType: m5.xlarge
+      KeyName: !Ref Keypair
+      DisableApiTermination: false
+      BlockDeviceMappings: 
+      - DeviceName: "/dev/xvda"
+        Ebs: 
+          VolumeType: "gp3"
+          DeleteOnTermination: True
+          VolumeSize: 320
+      SecurityGroupIds:
+        - !Ref WebEC2SGID
+      SubnetId: !Ref PrivateSubnet1ID
+      Tags: 
+        - Key: "Name"
+          Value: !Sub "${NameRole}-web-server"
+  
+  WASDBServerEC2:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref ImageId
+      InstanceType: m5.xlarge
+      KeyName: !Ref Keypair
+      DisableApiTermination: false
+      BlockDeviceMappings: 
+      - DeviceName: "/dev/xvda"
+        Ebs: 
+          VolumeType: "gp3"
+          DeleteOnTermination: True
+          VolumeSize: 1024
+      SecurityGroupIds:
+        - !Ref WASDBEC2SGID
+      SubnetId: !Ref PrivateSubnetDB1ID
+      Tags: 
+        - Key: "Name"
+          Value: !Sub "${NameRole}-wasdb-server"
+
+Outputs:
+  WebServerEC2ID:
+    Value: !Ref WebServerEC2
+  BastionPublicIP:
+    Value: !GetAtt BastionEC2.PublicIp
+  WebServerPrivateIP:
+    Value: !GetAtt WebServerEC2.PrivateIp
+  WASDBServerPrivateIP:
+    Value: !GetAtt WASDBServerEC2.PrivateIp
